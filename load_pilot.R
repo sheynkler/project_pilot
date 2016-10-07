@@ -1,4 +1,4 @@
-
+'
 #########  test load
 
 test_table_14 <- readLines("Saisontabelle_TVGesamt_tagesweise_2014.txt")
@@ -15,7 +15,7 @@ summary(table_14)
 
 
 write.table(file = "table_14.csv", table_14, row.names = F)
-
+'
 
 ############# load vzroslie
 

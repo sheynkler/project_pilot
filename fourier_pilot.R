@@ -1,5 +1,7 @@
 require(lubridate)
 library(car)
+library(corrplot)
+source("timeFunctions.R")
 summary(table_big)
 table_big_archiv <- table_big
 # Variablen Verarbeitung
@@ -18,29 +20,63 @@ table_big$Datum_2 <- paste(table_big$Datum_2, table_big$Startzeit)
 table_big$Datum <- as.POSIXct(strptime(table_big$Datum_2, "%Y-%m-%d %H:%M:%S"), tz="GMT")
 summary(table_big$Datum)
 
+table_big$Datum_2 <- NULL
+
+
 
 t <- as.POSIXlt(table_big$Datum)
 
-table_big$weekday <- t$wday
+table_big$weekday <-  calc_Week(t)
 
-table_big$weekday <- ifelse(table_big$weekday == 0, 7, table_big$weekday)
+#table_big$weekday <- ifelse(table_big$weekday == 0, 7, table_big$weekday)
 
-table_big$monthday <- t$mday
-table_big$yearday <- t$yday
-table_big$year <- t$year
-table_big$month <- t$mon + 1
+table_big$monthday <- t$mday - 1    #  день месяца
+table_big$yearday <- t$yday -1     #  день года
+table_big$year <- calc_Year(t)    #  год с дробью
 
-table(table_big$month)
-table_big$hour <- t$hour
-table(table_big$hour)
+table_big$month <-  calc_Month(t)   # месяц с дробью
+table_big$hour <- calc_Hour(t)      # часы с дробью
 
-table_big$year <- table_big$year - min(table_big$year) +1
-table(table_big$year)
+'summary(table_big$month)
+summary(table_big$year)
+table_big$year[1:100]
+summary(table_big$month)
 
-f_test <- sin(1*2*pi*table_big$weekday[1]/7)
+table(table_big$hour)'
+
+table_big$year <- table_big$year - min(table_big$year) 
+#table(table_big$year)
+
+
+table_big$nn_log10 <- log10(1:nrow(table_big))
+
+
+
+#feiertage einstellen
+
+feiertage <- read.csv("feiertage.csv", header = T, sep = ";")
+feiertage$date <- as.Date(feiertage$TIMESTMP, "%d.%m.%Y") 
+
+
+table_big$day <- as.Date(table_big$Datum)
+summary(table_big$day)
+
+
+tt <- match(table_big$day, feiertage$date)
+tt[1:100]
+table_big$feiertage <- feiertage$FEIERTAG[tt]
+table(table_big$feiertage)
+table_big$feiertage[1:100]
+table_big$day <- NULL
+
+#summary(table_big$monthday)
+
+
+
 
 PARAMETER_FUER_AG <- 4
 
+# hour
 
 for(i in 1:PARAMETER_FUER_AG){
   fur <- sin(i*2*pi*table_big$hour/24)
@@ -53,8 +89,11 @@ for(i in 1:PARAMETER_FUER_AG){
   
 }
 
+# week day
+
+
 for(i in 1:PARAMETER_FUER_AG){
-  fur <- sin(i*2*pi*table_big$weekday/7)
+  fur <- sin(i*2*pi*table_big$weekday/7 )
   table_big[,(ncol(table_big)+1)] <- fur
   names(table_big)[ncol(table_big)] <- paste("f", "w", "sin", i, sep = "_")
   fur <- cos(i*2*pi*table_big$weekday/7)
@@ -64,17 +103,22 @@ for(i in 1:PARAMETER_FUER_AG){
   
 }
 
+# monthday
+
+year_month_param <- 365/12 -1
+
+
 for(i in 1:PARAMETER_FUER_AG){
-  fur <- sin(i*2*pi*table_big$monthday/30.5)
+  fur <- sin(i*2*pi*table_big$monthday/year_month_param)
   table_big[,(ncol(table_big)+1)] <- fur
   names(table_big)[ncol(table_big)] <- paste("f", "d", "sin", i, sep = "_")
-  fur <- cos(i*2*pi*table_big$monthday/30.5)
+  fur <- cos(i*2*pi*table_big$monthday/year_month_param)
   table_big[,(ncol(table_big)+1)] <- fur
   names(table_big)[ncol(table_big)] <- paste("f", "d", "cos", i, sep = "_")
   
   
 }
-
+# month
 
 for(i in 1:PARAMETER_FUER_AG){
   fur <- sin(i*2*pi*table_big$month/12)
@@ -90,6 +134,9 @@ for(i in 1:PARAMETER_FUER_AG){
 
 
 table(table_big$year)
+
+
+# year
 
 year_diff <- max(table_big$year) - min(table_big$year) + 1
 
@@ -108,22 +155,45 @@ for(i in 1:PARAMETER_FUER_AG){
 names(table_big) 
 #    table_big <- table_big[,1:30]
 
-table_big$nn <- 1:nrow(table_big)
-table_big$nn_log10 <- log10(table_big$nn)
-table_big$nn_log10_2 <- table_big$nn_log10^2
 
-for(i in 31:70){
+#table_big$nn_log10_2 <- table_big$nn_log10^2
+names(table_big) 
+'for(i in 31:70){
   fur_nn_log <- table_big[,i] * table_big$nn_log10
   table_big[,(ncol(table_big)+1)] <- fur_nn_log
   names(table_big)[ncol(table_big)] <- paste(names(table_big)[i], "nlog", sep = "_")
   
-}
+}'
 
 
-cor(table_big[31:70])
 
-data_regression <- table_big[,31:113]
+# ICH HABE FERTIG!!!
+names(table_big)
+data_predictor <- table_big[,30:71]
+M <- cor(data_predictor)
+
+data_m <- as.data.frame(as.matrix(M))
+
+
+
+
+corrplot(M, method="square")
+
+vif_param <- 4
+
+
+data_regression <- cbind(table_big$`F 30-49`, data_predictor)
+names(data_regression)[1] <- "dependet"
 names(data_regression)
+
+fit <- lm(dependet ~ ., data = data_regression)
+
+vif_value <- vif(fit)
+vif_value_df <- as.data.frame(vif_value)
+
+summary(fit)
+
+
 
 
 
@@ -163,4 +233,7 @@ names(test_vif)
 
 vif(fit) # variance inflation factors
 sqrt(vif(fit)) > 2 # problem?
+
+
+summary(table_big)
 
